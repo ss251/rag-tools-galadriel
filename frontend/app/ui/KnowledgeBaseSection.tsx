@@ -1,4 +1,4 @@
-'use client';
+"use client"
 import { useState } from 'react';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -10,7 +10,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { CopyIcon, TickIcon } from '@/components/ui/icons';
 
 export default function KnowledgeBaseGeneration() {
-  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState<File[]>([]);
   const [chunkSize, setChunkSize] = useState(1500);
   const [chunkOverlap, setChunkOverlap] = useState(200);
   const [response, setResponse] = useState<null | { cid: string; index_cid: string; 'number of documents': string; [key: string]: string }>(null);
@@ -18,35 +18,41 @@ export default function KnowledgeBaseGeneration() {
   const [loading, setLoading] = useState(false);
   const [copySuccess, setCopySuccess] = useState({ cid: false, index_cid: false, 'number of documents': false });
 
-  const handleFileChange = (e: { target: { files: any; }; }) => {
-    const fileList = e.target.files;
-    if (fileList && fileList.length > 0) {
-      setFile(fileList[0]);
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setFiles(Array.from(e.target.files));
     }
   };
 
-  const handleSubmit = async (e: { preventDefault: () => void; }) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
-    if (!file) {
-      setError('Please select a file to upload');
+    if (files.length === 0) {
+      setError('Please select at least one file to upload');
       setLoading(false);
       return;
     }
 
     const formData = new FormData();
-    formData.append('file', file);
+    files.forEach((file, index) => {
+      console.log(`Adding file ${index}:`, file.name, file.type, file.size);
+      formData.append('file', file);
+    });
     formData.append('chunk_size', chunkSize.toString());
     formData.append('chunk_overlap', chunkOverlap.toString());
 
     try {
+      console.log('Sending request to /api/process-rag');
       const res = await fetch('/api/process-rag', {
         method: 'POST',
         body: formData,
       });
 
+      console.log('Response status:', res.status);
       const data = await res.json();
+      console.log('Response data:', data);
+
       if (res.ok) {
         setResponse(data);
         setError(null);
@@ -55,12 +61,14 @@ export default function KnowledgeBaseGeneration() {
         setError(data.error);
       }
     } catch (err) {
+      console.error('Error:', err);
       setResponse(null);
-      setError('An error occurred while processing the file.');
+      setError('An error occurred while processing the files.');
     } finally {
       setLoading(false);
     }
   };
+
 
   const handleCopy = (key: string) => {
     if (response && response[key]) {
@@ -83,8 +91,8 @@ export default function KnowledgeBaseGeneration() {
             <CardContent className="space-y-4 mt-8">
               <form onSubmit={handleSubmit}>
                 <div className="grid gap-4 mb-4">
-                  <Label htmlFor="file-upload">File</Label>
-                  <Input type="file" id="file-upload" onChange={handleFileChange} />
+                  <Label htmlFor="file-upload">Files</Label>
+                  <Input type="file" id="file-upload" onChange={handleFileChange} multiple />
                 </div>
                 <div className="grid gap-4 mb-6">
                   <Label htmlFor="chunk-size">Chunk Size</Label>

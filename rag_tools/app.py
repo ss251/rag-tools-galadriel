@@ -16,46 +16,55 @@ def process_rag():
     if 'file' not in request.files:
         return jsonify({'error': 'No file part'}), 400
     
-    file = request.files['file']
-    if file.filename == '':
+    files = request.files.getlist('file')
+    if not files or files[0].filename == '':
         return jsonify({'error': 'No selected file'}), 400
 
-    if file:
-        filename = secure_filename(file.filename)
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(file_path)
+    chunk_size = int(request.form.get('chunk_size', 8000))
+    chunk_overlap = int(request.form.get('chunk_overlap', 100))
 
-        chunk_size = int(request.form.get('chunk_size', 8000))
-        chunk_overlap = int(request.form.get('chunk_overlap', 100))
+    text_splitter = RecursiveCharacterTextSplitter(
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        length_function=len,
+        is_separator_regex=False,
+    )
 
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
-            length_function=len,
-            is_separator_regex=False,
-        )
+    all_documents = []
+    file_paths = []
 
-        try:
+    try:
+        for file in files:
+            filename = secure_filename(file.filename)
+            file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(file_path)
+            file_paths.append(file_path)
+
             documents = load_documents_use_case.execute(file_path, text_splitter)
-            if not documents:
-                return jsonify({'error': 'No documents to process'}), 400
+            all_documents.extend(documents)
 
-            cid = upload_documents_use_case.execute(documents)
-            response = request_indexing_use_case.execute(cid)
+        if not all_documents:
+            return jsonify({'error': 'No documents to process'}), 400
 
-            if response.is_processed and response.index_cid:
-                return jsonify({
-                    'message': 'Knowledge base indexed successfully',
-                    'index_cid': response.index_cid,
-                    'cid': cid,
-                    'number of documents': len(documents),
-                })
-            else:
-                return jsonify({'error': response.error or 'Failed to index knowledge base'}), 500
-        except Exception as e:
-            return jsonify({'error': str(e)}), 500
-        finally:
-            os.remove(file_path)  # Clean up the uploaded file
+        cid = upload_documents_use_case.execute(all_documents)
+        response = request_indexing_use_case.execute(cid)
+
+        if response.is_processed and response.index_cid:
+            return jsonify({
+                'message': 'Knowledge base indexed successfully',
+                'index_cid': response.index_cid,
+                'cid': cid,
+                'number of documents': len(all_documents),
+            })
+        else:
+            return jsonify({'error': response.error or 'Failed to index knowledge base'}), 500
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        # Clean up the uploaded files
+        for file_path in file_paths:
+            if os.path.exists(file_path):
+                os.remove(file_path)
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=5001)
