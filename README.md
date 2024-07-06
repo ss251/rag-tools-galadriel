@@ -58,10 +58,6 @@ yarn install
 yarn run dev
 ```
 
-## Current Limitations
-
-- The system currently supports single file upload for knowledge base processing and indexing. Future updates will include support for multiple file uploads.
-
 ## Contributing
 
 Contributions to improve the Galadriel RAG Tools are welcome. Please feel free to submit issues and pull requests.
